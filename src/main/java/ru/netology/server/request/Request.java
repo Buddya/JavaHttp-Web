@@ -1,22 +1,31 @@
 package ru.netology.server.request;
 
+import org.apache.http.client.utils.URLEncodedUtils;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.util.HashMap;
-import java.util.Map;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 
 public class Request {
     private final String method;
     private final String path;
     private final Map<String, String> headers;
+    private final Map<String, List<String>> queryParams;
     private final InputStream body;
 
-    private Request(String method, String path, Map<String, String> headers, InputStream body) {
+    private Request(String method,
+                    String path,
+                    Map<String, String> headers,
+                    Map<String, List<String>> queryParams,
+                    InputStream body) {
+
         this.method = method;
         this.path = path;
         this.headers = headers;
+        this.queryParams = queryParams;
         this.body = body;
     }
 
@@ -30,6 +39,10 @@ public class Request {
 
     public Map<String, String> getHeaders() {
         return headers;
+    }
+
+    public Map<String, List<String>> getQueryParams() {
+        return queryParams;
     }
 
     public InputStream getBody() {
@@ -48,8 +61,10 @@ public class Request {
             // just close socket
             throw new IOException("Invalid request");
         }
+
         String method = parts[0];
         String path = parts[1];
+        String cleanPath = getPathWithoutQuery(path);
 
         Map<String, String> headers = new HashMap<>();
         String line;
@@ -61,7 +76,27 @@ public class Request {
             headers.put(name, value);
         }
 
-        return new Request(method, path, headers, inputStream);
+        return new Request(method, cleanPath, headers, getQueryParams(path), inputStream);
+    }
+
+    private static String getPathWithoutQuery(String path) {
+        if (path.contains("?")) {
+            return path.substring(0, path.indexOf("?"));
+        }
+        return path;
+    }
+
+    private static Map<String, List<String>> getQueryParams(String path) {
+        if (!path.contains("?")) {
+            return Collections.emptyMap();
+        }
+
+        final String queryParams = path.substring(path.indexOf("?") + 1);
+        final HashMap<String, List<String>> queryParamsMap = new HashMap<>();
+        URLEncodedUtils.parse(queryParams, StandardCharsets.UTF_8)
+                .forEach(param -> queryParamsMap.computeIfAbsent(param.getName(),
+                        qValue -> new ArrayList<>()).add(param.getValue()));
+        return queryParamsMap;
     }
 
     @Override
