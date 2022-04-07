@@ -7,7 +7,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class Request {
     private final String method;
@@ -18,8 +21,8 @@ public class Request {
 
     private Request(String method,
                     String path,
-                    Map<String, String> headers,
                     Map<String, List<String>> queryParams,
+                    Map<String, String> headers,
                     InputStream body) {
 
         this.method = method;
@@ -49,6 +52,10 @@ public class Request {
         return body;
     }
 
+    public List<String> getQueryParam(String name) {
+        return queryParams.get(name);
+    }
+
     public static Request fromInputStream(InputStream inputStream) throws IOException {
         final var in = new BufferedReader(new InputStreamReader(inputStream));
 
@@ -64,7 +71,14 @@ public class Request {
 
         String method = parts[0];
         String path = parts[1];
-        String cleanPath = getPathWithoutQuery(path);
+
+        final Map<String, List<String>> paramsMap = new HashMap<>();
+        if (path.contains("?")) {
+            final String params = path.substring(path.indexOf("?") + 1);
+            URLEncodedUtils.parse(params, StandardCharsets.UTF_8)
+                    .forEach(param -> paramsMap.computeIfAbsent(param.getName(),
+                            anything -> new ArrayList<>()).add(param.getValue()));
+        }
 
         Map<String, String> headers = new HashMap<>();
         String line;
@@ -76,27 +90,7 @@ public class Request {
             headers.put(name, value);
         }
 
-        return new Request(method, cleanPath, headers, getQueryParams(path), inputStream);
-    }
-
-    private static String getPathWithoutQuery(String path) {
-        if (path.contains("?")) {
-            return path.substring(0, path.indexOf("?"));
-        }
-        return path;
-    }
-
-    private static Map<String, List<String>> getQueryParams(String path) {
-        if (!path.contains("?")) {
-            return Collections.emptyMap();
-        }
-
-        final String queryParams = path.substring(path.indexOf("?") + 1);
-        final HashMap<String, List<String>> queryParamsMap = new HashMap<>();
-        URLEncodedUtils.parse(queryParams, StandardCharsets.UTF_8)
-                .forEach(param -> queryParamsMap.computeIfAbsent(param.getName(),
-                        qValue -> new ArrayList<>()).add(param.getValue()));
-        return queryParamsMap;
+        return new Request(method, path, paramsMap, headers, inputStream);
     }
 
     @Override
